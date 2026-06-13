@@ -146,6 +146,21 @@ test('serializes to a stable array contract for the matching engine', function (
     ]);
 });
 
+test('rounds each line amount at the cent boundary before summing', function () {
+    // Each 100.005 rounds half-up to 100.01 at the boundary, so 100.01 + 100.01 = 200.02.
+    // A sum-then-round strategy would instead give 200.01 — this pins ADR 0001's choice.
+    $result = (new FeeCalculatorService)->calculate(
+        [
+            ['line_number' => 1, 'manifest_number' => 'M1', 'amount' => '100.005'],
+            ['line_number' => 2, 'manifest_number' => 'M1', 'amount' => '100.005'],
+        ],
+        ['manifest_fee' => 0, 'surcharge_percent' => 0, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
+    );
+
+    expect($result->manifests[0]->baseTotal)->toBe('200.02');
+    expect($result->manifests[0]->manifestTotal)->toBe('200.02');
+});
+
 test('fails loud on invalid input', function (array $lines, array $config, string $message) {
     expect(fn () => (new FeeCalculatorService)->calculate($lines, $config))
         ->toThrow(InvalidArgumentException::class, $message);
@@ -169,5 +184,15 @@ test('fails loud on invalid input', function (array $lines, array $config, strin
         [['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 'free']],
         ['manifest_fee' => 25.00, 'surcharge_percent' => 8.7, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
         'Money expects a numeric value',
+    ],
+    'scientific-notation amount' => [
+        [['line_number' => 1, 'manifest_number' => 'M1', 'amount' => '1e3']],
+        ['manifest_fee' => 25.00, 'surcharge_percent' => 8.7, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
+        'Money expects a decimal value',
+    ],
+    'null amount' => [
+        [['line_number' => 7, 'manifest_number' => 'M1', 'amount' => null]],
+        ['manifest_fee' => 25.00, 'surcharge_percent' => 8.7, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
+        'line 7 on manifest M1 is missing an amount',
     ],
 ]);
