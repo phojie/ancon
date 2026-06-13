@@ -3,6 +3,7 @@
 use App\Services\FeeCalculator\FeeCalculatorService;
 use App\Services\FeeCalculator\InvoiceFeeBreakdown;
 use App\Services\FeeCalculator\ManifestFeeBreakdown;
+use App\Services\FeeCalculator\Money;
 
 /**
  * The worked example from the brief. Asserts every intermediate figure, not just
@@ -31,24 +32,26 @@ test('calculates the worked example with exact per-manifest figures', function (
 
     $first = $result->manifests[0];
     expect($first)->toBeInstanceOf(ManifestFeeBreakdown::class);
+    expect($first->baseTotal)->toBeInstanceOf(Money::class);
     expect($first->manifestNumber)->toBe('027425604JJK');
     expect($first->lineNumbers)->toBe([1, 2, 3, 4]);
-    expect($first->baseTotal)->toBe('960.00');
-    expect($first->manifestFee)->toBe('25.00');
-    expect($first->subtotal)->toBe('985.00');
-    expect($first->surcharge)->toBe('85.70');
-    expect($first->manifestTotal)->toBe('1070.70');
+    expect((string) $first->baseTotal)->toBe('960.00');
+    expect((string) $first->manifestFee)->toBe('25.00');
+    expect((string) $first->subtotal)->toBe('985.00');
+    expect((string) $first->surcharge)->toBe('85.70');
+    expect((string) $first->manifestTotal)->toBe('1070.70');
 
     $second = $result->manifests[1];
     expect($second->manifestNumber)->toBe('027425611JJK');
     expect($second->lineNumbers)->toBe([5]);
-    expect($second->baseTotal)->toBe('320.00');
-    expect($second->manifestFee)->toBe('25.00');
-    expect($second->subtotal)->toBe('345.00');
-    expect($second->surcharge)->toBe('30.02');
-    expect($second->manifestTotal)->toBe('375.02');
+    expect((string) $second->baseTotal)->toBe('320.00');
+    expect((string) $second->manifestFee)->toBe('25.00');
+    expect((string) $second->subtotal)->toBe('345.00');
+    expect((string) $second->surcharge)->toBe('30.02');
+    expect((string) $second->manifestTotal)->toBe('375.02');
 
-    expect($result->invoiceTotal)->toBe('1445.72');
+    expect($result->invoiceTotal)->toBeInstanceOf(Money::class);
+    expect((string) $result->invoiceTotal)->toBe('1445.72');
 });
 
 test('rounds the surcharge half-up at the cent boundary', function () {
@@ -58,8 +61,8 @@ test('rounds the surcharge half-up at the cent boundary', function () {
         ['manifest_fee' => 0, 'surcharge_percent' => 8.755, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
     );
 
-    expect($result->manifests[0]->surcharge)->toBe('8.76');
-    expect($result->manifests[0]->manifestTotal)->toBe('108.76');
+    expect((string) $result->manifests[0]->surcharge)->toBe('8.76');
+    expect((string) $result->manifests[0]->manifestTotal)->toBe('108.76');
 });
 
 test('applies the surcharge to the base total only when basis is base_only', function () {
@@ -70,10 +73,10 @@ test('applies the surcharge to the base total only when basis is base_only', fun
     );
 
     $manifest = $result->manifests[0];
-    expect($manifest->baseTotal)->toBe('100.00');
-    expect($manifest->subtotal)->toBe('125.00');
-    expect($manifest->surcharge)->toBe('10.00');
-    expect($manifest->manifestTotal)->toBe('135.00');
+    expect((string) $manifest->baseTotal)->toBe('100.00');
+    expect((string) $manifest->subtotal)->toBe('125.00');
+    expect((string) $manifest->surcharge)->toBe('10.00');
+    expect((string) $manifest->manifestTotal)->toBe('135.00');
 });
 
 test('groups interleaved lines preserving first-seen manifest order', function () {
@@ -89,7 +92,7 @@ test('groups interleaved lines preserving first-seen manifest order', function (
 
     expect(array_map(fn ($m) => $m->manifestNumber, $result->manifests))->toBe(['A', 'B', 'C']);
     expect($result->manifests[0]->lineNumbers)->toBe([1, 3]);
-    expect($result->manifests[0]->baseTotal)->toBe('15.00');
+    expect((string) $result->manifests[0]->baseTotal)->toBe('15.00');
 });
 
 test('handles purely numeric manifest numbers without integer key coercion', function () {
@@ -100,7 +103,7 @@ test('handles purely numeric manifest numbers without integer key coercion', fun
     );
 
     expect($result->manifests[0]->manifestNumber)->toBe('12345');
-    expect($result->manifests[0]->baseTotal)->toBe('100.00');
+    expect((string) $result->manifests[0]->baseTotal)->toBe('100.00');
 });
 
 test('treats negative line amounts as credits', function () {
@@ -112,8 +115,8 @@ test('treats negative line amounts as credits', function () {
         ['manifest_fee' => 0, 'surcharge_percent' => 0, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
     );
 
-    expect($result->manifests[0]->baseTotal)->toBe('150.00');
-    expect($result->invoiceTotal)->toBe('150.00');
+    expect((string) $result->manifests[0]->baseTotal)->toBe('150.00');
+    expect((string) $result->invoiceTotal)->toBe('150.00');
 });
 
 test('returns an empty breakdown with a zero total for no lines', function () {
@@ -123,7 +126,7 @@ test('returns an empty breakdown with a zero total for no lines', function () {
     );
 
     expect($result->manifests)->toBe([]);
-    expect($result->invoiceTotal)->toBe('0.00');
+    expect((string) $result->invoiceTotal)->toBe('0.00');
 });
 
 test('serializes to a stable array contract for the matching engine', function () {
@@ -157,8 +160,8 @@ test('rounds each line amount at the cent boundary before summing', function () 
         ['manifest_fee' => 0, 'surcharge_percent' => 0, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
     );
 
-    expect($result->manifests[0]->baseTotal)->toBe('200.02');
-    expect($result->manifests[0]->manifestTotal)->toBe('200.02');
+    expect((string) $result->manifests[0]->baseTotal)->toBe('200.02');
+    expect((string) $result->manifests[0]->manifestTotal)->toBe('200.02');
 });
 
 test('fails loud on invalid input', function (array $lines, array $config, string $message) {
@@ -194,5 +197,10 @@ test('fails loud on invalid input', function (array $lines, array $config, strin
         [['line_number' => 7, 'manifest_number' => 'M1', 'amount' => null]],
         ['manifest_fee' => 25.00, 'surcharge_percent' => 8.7, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
         'line 7 on manifest M1 is missing an amount',
+    ],
+    'scientific-notation surcharge_percent' => [
+        [['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 10.00]],
+        ['manifest_fee' => 25.00, 'surcharge_percent' => '1e3', 'surcharge_applies_to' => 'base_plus_manifest_fee'],
+        'Money expects a decimal value',
     ],
 ]);
