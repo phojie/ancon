@@ -27,15 +27,7 @@ final readonly class Money implements \Stringable
      */
     public static function of(string|int|float $value): self
     {
-        $normalized = self::toNumericString($value);
-
-        try {
-            $amount = new Number($normalized);
-        } catch (\ValueError $valueError) {
-            throw new InvalidArgumentException(sprintf('Money expects a decimal value, got "%s".', $normalized), $valueError->getCode(), previous: $valueError);
-        }
-
-        return new self(self::round($amount));
+        return new self(self::round(self::toNumber($value)));
     }
 
     public static function zero(): self
@@ -59,7 +51,7 @@ final readonly class Money implements \Stringable
     public function percentage(string|int|float $percent): self
     {
         $raw = $this->amount
-            ->mul(self::toNumericString($percent))
+            ->mul(self::toNumber($percent))
             ->div('100', self::SCALE + 6);
 
         return new self(self::round($raw));
@@ -73,6 +65,27 @@ final readonly class Money implements \Stringable
     private static function round(Number $value): Number
     {
         return $value->round(self::SCALE, RoundingMode::HalfAwayFromZero);
+    }
+
+    /**
+     * Build a BcMath\Number from a numeric scalar, failing loud. This is the single
+     * guarded entry point for raw input, so well-formed-but-unsupported forms (e.g. the
+     * scientific-notation string '1e3') surface as InvalidArgumentException rather than a
+     * raw ValueError — whether the value is an amount or a percentage.
+     */
+    private static function toNumber(string|int|float $value): Number
+    {
+        $normalized = self::toNumericString($value);
+
+        try {
+            return new Number($normalized);
+        } catch (\ValueError $valueError) {
+            throw new InvalidArgumentException(
+                sprintf('Money expects a decimal value, got "%s".', $normalized),
+                $valueError->getCode(),
+                previous: $valueError,
+            );
+        }
     }
 
     /**
