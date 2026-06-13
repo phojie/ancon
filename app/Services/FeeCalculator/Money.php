@@ -15,7 +15,7 @@ use RoundingMode;
  * ({@see RoundingMode::HalfAwayFromZero}), so all arithmetic is exact and floats never
  * enter the calculation. See ADR 0001.
  */
-final readonly class Money
+final readonly class Money implements \Stringable
 {
     /** Decimal places every money figure is rounded to. */
     public const int SCALE = 2;
