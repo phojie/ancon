@@ -14,7 +14,7 @@ A single `FeeCalculatorService`, but:
 - **[Manifest roll-up](CONTEXT.md)** - groups invoice lines by manifest into one total each.
 - **[Exact money math](docs/adr/0001-bcmath-money-and-half-up-rounding.md)** - round-half-up via `BcMath\Number`, no float drift.
 - **Configurable surcharge** - per-vendor `SurchargeBasis` enum; unknown values fail loud.
-- **Immutable result contract** - typed DTOs, exact string money, ready for a matching engine.
+- **Immutable result contract** - typed DTOs holding exact `Money`, serialized to strings, ready for a matching engine.
 - **[Fully tested](tests/Unit/FeeCalculatorServiceTest.php)** - worked example plus rounding, grouping, credit, and validation edges.
 
 ## Status

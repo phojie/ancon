@@ -198,4 +198,9 @@ test('fails loud on invalid input', function (array $lines, array $config, strin
         ['manifest_fee' => 25.00, 'surcharge_percent' => 8.7, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
         'line 7 on manifest M1 is missing an amount',
     ],
+    'scientific-notation surcharge_percent' => [
+        [['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 10.00]],
+        ['manifest_fee' => 25.00, 'surcharge_percent' => '1e3', 'surcharge_applies_to' => 'base_plus_manifest_fee'],
+        'Money expects a decimal value',
+    ],
 ]);

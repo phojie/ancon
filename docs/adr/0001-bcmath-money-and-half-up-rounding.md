@@ -22,8 +22,9 @@ behind a library.
 
 - The worked example resolves exactly: surcharges `85.695 → 85.70` and `30.015 → 30.02`,
   invoice total `1445.72`.
-- Money crosses the return contract as a 2-decimal **string** (e.g. `"1070.70"`), never a float,
-  so the Matching Engine receives exact values.
+- Money crosses the in-process contract as a `Money` value object and serializes to a 2-decimal
+  **string** (e.g. `"1070.70"`) at the `toArray()` boundary — never a float, so the Matching Engine
+  receives exact values either way.
 - Rounding is applied at each money boundary (each computed figure), not only at the end.
 - Migration path if requirements grow: swap the `Money` VO internals for `brick/money` behind the
   same interface.
