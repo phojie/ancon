@@ -16,7 +16,7 @@ final readonly class InvoiceFeeBreakdown
      */
     public function __construct(
         public array $manifests,
-        public string $invoiceTotal,
+        public Money $invoiceTotal,
     ) {}
 
     /**
@@ -29,7 +29,7 @@ final readonly class InvoiceFeeBreakdown
                 static fn (ManifestFeeBreakdown $manifest): array => $manifest->toArray(),
                 $this->manifests,
             ),
-            'invoice_total' => $this->invoiceTotal,
+            'invoice_total' => (string) $this->invoiceTotal,
         ];
     }
 }
