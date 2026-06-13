@@ -37,10 +37,10 @@ final class FeeCalculatorService
             $breakdown = $this->calculateManifest((string) $manifestNumber, $manifestLines, $config);
 
             $manifests[] = $breakdown;
-            $invoiceTotal = $invoiceTotal->plus(Money::of($breakdown->manifestTotal));
+            $invoiceTotal = $invoiceTotal->plus($breakdown->manifestTotal);
         }
 
-        return new InvoiceFeeBreakdown($manifests, (string) $invoiceTotal);
+        return new InvoiceFeeBreakdown($manifests, $invoiceTotal);
     }
 
     /**
@@ -92,11 +92,11 @@ final class FeeCalculatorService
         return new ManifestFeeBreakdown(
             manifestNumber: $manifestNumber,
             lineNumbers: $lineNumbers,
-            baseTotal: (string) $baseTotal,
-            manifestFee: (string) $config->manifestFee,
-            subtotal: (string) $subtotal,
-            surcharge: (string) $surcharge,
-            manifestTotal: (string) $manifestTotal,
+            baseTotal: $baseTotal,
+            manifestFee: $config->manifestFee,
+            subtotal: $subtotal,
+            surcharge: $surcharge,
+            manifestTotal: $manifestTotal,
         );
     }
 
