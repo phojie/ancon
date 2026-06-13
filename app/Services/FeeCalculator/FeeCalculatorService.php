@@ -33,7 +33,8 @@ final class FeeCalculatorService
         $invoiceTotal = Money::zero();
 
         foreach ($this->groupByManifest($lines) as $manifestNumber => $manifestLines) {
-            $breakdown = $this->calculateManifest($manifestNumber, $manifestLines, $config);
+            // PHP coerces integer-like array keys to int, so cast back to the canonical string.
+            $breakdown = $this->calculateManifest((string) $manifestNumber, $manifestLines, $config);
 
             $manifests[] = $breakdown;
             $invoiceTotal = $invoiceTotal->plus(Money::of($breakdown->manifestTotal));
