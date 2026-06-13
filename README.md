@@ -17,27 +17,6 @@ A single `FeeCalculatorService`, but:
 - **Immutable result contract** - typed DTOs holding exact `Money`, serialized to strings, ready for a matching engine.
 - **[Fully tested](tests/Unit/FeeCalculatorServiceTest.php)** - worked example plus rounding, grouping, credit, and validation edges.
 
-## Status
-
-| Branch | CI                       |
-| ------ | ------------------------ |
-| `main` | [![ci][ci-src]][ci-href] |
-
-## References
-
-| Resource        | Link                                                                                                                   |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Project Board   | [github.com/users/phojie/projects/4](https://github.com/users/phojie/projects/4?query=sort%3Aupdated-desc+state%3Aopen) |
-| Domain Glossary | [CONTEXT.md](CONTEXT.md)                                                                                                |
-| Decisions (ADR) | [docs/adr](docs/adr)                                                                                                    |
-
-## Getting Started
-
-```bash
-composer install
-php artisan test --compact
-```
-
 ## Assumptions
 
 - **Money is exact, never float** — all arithmetic runs through a `BcMath\Number`-backed `Money` value object, round-half-up at each money boundary ([ADR 0001](docs/adr/0001-bcmath-money-and-half-up-rounding.md)).
@@ -56,6 +35,21 @@ php artisan test --compact
 - Extract the fee calculation into a composable rule pipeline (Open/Closed) — turn the fixed `base → fee → surcharge` sequence into ordered `FeeRule` steps so new fee types (tax, tiered fees, a second surcharge) extend the calculator without modifying it; pair it with a `FeeCalculator` interface for DI and swapability (Dependency Inversion).
 - Expose the service over HTTP with `spatie/laravel-data` — request → input DTO (validated at the edge) → result → JSON — keeping the domain DTOs plain.
 - Give `Money` a currency (or swap its internals for `brick/money`) if invoices ever span currencies — the value object already isolates that change.
+
+## References
+
+| Resource        | Link                                                                                                                   |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Project Board   | [github.com/users/phojie/projects/4](https://github.com/users/phojie/projects/4?query=sort%3Aupdated-desc+state%3Aopen) |
+| Domain Glossary | [CONTEXT.md](CONTEXT.md)                                                                                                |
+| Decisions (ADR) | [docs/adr](docs/adr)                                                                                                    |
+
+## Getting Started
+
+```bash
+composer install
+php artisan test --compact
+```
 
 <!-- Badge Variables -->
 
