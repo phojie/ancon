@@ -24,6 +24,7 @@
         "nunomaduro/collision": "^8.6",
         "pestphp/pest": "^4.7",
         "pestphp/pest-plugin-laravel": "^4.1",
+        "rector/rector": "^2.4",
         "spatie/guidelines-skills": "^1.0"
     },
     "autoload": {
@@ -55,6 +56,8 @@
             "@php artisan config:clear --ansi @no_additional_args",
             "@php artisan test"
         ],
+        "rector": "rector process",
+        "rector:dry": "rector process --dry-run",
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
