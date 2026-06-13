@@ -1,58 +1,102 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Vendor Invoice Fee Calculation Service
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A single Laravel service, `FeeCalculatorService`, that rolls vendor invoice lines up into one
+billable total per manifest, applying vendor-specific fees.
 
-## About Laravel
-
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
-
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+For each unique manifest on the invoice:
+  base_total     = sum of all line amounts for that manifest
+  subtotal       = base_total + manifest_fee        (one fee per unique manifest)
+  surcharge      = surcharge_basis * surcharge_percent
+  manifest_total = subtotal + surcharge
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+## Run
 
-## Contributing
+```bash
+composer install
+php artisan test --compact          # 12 fee tests, worked example asserts every figure
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Where things live
 
-## Code of Conduct
+| File | Role |
+|------|------|
+| [`app/Services/FeeCalculator/FeeCalculatorService.php`](app/Services/FeeCalculator/FeeCalculatorService.php) | The service. Groups by manifest, calculates, returns the result DTO. |
+| [`app/Services/FeeCalculator/Money.php`](app/Services/FeeCalculator/Money.php) | Immutable money value object backed by PHP 8.4 `BcMath\Number`. Exact, round-half-up. |
+| [`app/Services/FeeCalculator/VendorFeeConfig.php`](app/Services/FeeCalculator/VendorFeeConfig.php) | Typed + validated vendor config, built from the raw array. |
+| [`app/Services/FeeCalculator/SurchargeBasis.php`](app/Services/FeeCalculator/SurchargeBasis.php) | Enum for `surcharge_applies_to`. |
+| [`app/Services/FeeCalculator/ManifestFeeBreakdown.php`](app/Services/FeeCalculator/ManifestFeeBreakdown.php) · [`InvoiceFeeBreakdown.php`](app/Services/FeeCalculator/InvoiceFeeBreakdown.php) | The return contract (immutable DTOs + `toArray()`). |
+| [`tests/Unit/FeeCalculatorServiceTest.php`](tests/Unit/FeeCalculatorServiceTest.php) | The worked-example test plus edge-case coverage. |
+| [`CONTEXT.md`](CONTEXT.md) · [`docs/adr/0001-...`](docs/adr/0001-bcmath-money-and-half-up-rounding.md) | Domain glossary and the money-precision decision record. |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Return contract
 
-## Security Vulnerabilities
+The output feeds a separate matching engine, so the result is an immutable, ordered,
+serializable structure. Money crosses the boundary as exact 2-decimal **strings**, never floats.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```php
+$result = (new FeeCalculatorService())->calculate($lines, $vendorConfig);
 
-## License
+$result->invoiceTotal;            // "1445.72"
+$result->manifests[0]->subtotal;  // "985.00"
+$result->toArray();               // fully serializable for the matching engine
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```php
+// toArray() shape
+[
+  'manifests' => [
+    [
+      'manifest_number' => '027425604JJK',
+      'line_numbers'    => [1, 2, 3, 4],   // traceability back to source lines
+      'base_total'      => '960.00',
+      'manifest_fee'    => '25.00',
+      'subtotal'        => '985.00',
+      'surcharge'       => '85.70',
+      'manifest_total'  => '1070.70',
+    ],
+    // ...
+  ],
+  'invoice_total' => '1445.72',
+]
+```
+
+## Assumptions and decisions
+
+1. **Money is not float.** `345.00 × 0.087 = 30.015` is not representable in binary float, so all
+   math runs through a `Money` value object backed by `BcMath\Number` (PHP 8.4's
+   arbitrary-precision decimal). No Composer dependency was added — the project rule is no
+   dependency changes without approval, and `brick/money` would be the documented upgrade path if
+   this grows. See [ADR 0001](docs/adr/0001-bcmath-money-and-half-up-rounding.md).
+2. **Rounding is round-half-up, applied at each money boundary** (every figure rounded to 2 dp),
+   not only at the end. This reproduces the brief exactly (`85.695 → 85.70`, `30.015 → 30.02`).
+3. **`surcharge_applies_to` is an enum.** The field name implies variants, so it is modeled as
+   `SurchargeBasis`. `base_plus_manifest_fee` is the live value; `base_only` is included as the
+   obvious anticipated variant. Any unknown value throws rather than silently mis-billing.
+4. **Manifests keep first-seen order;** manifest numbers are trimmed but otherwise compared exactly
+   (case-sensitive — they are identifiers, not labels). Purely numeric manifest numbers are handled
+   despite PHP's integer array-key coercion.
+5. **Input is taken as plain arrays exactly as the brief shows.** The vendor config is validated
+   inside the service; missing keys, blank manifest numbers, and non-numeric amounts throw
+   `InvalidArgumentException` (fail loud — wrong money is worse than no money).
+6. **An invoice with no lines is valid** and returns an empty breakdown with `invoice_total`
+   `"0.00"`. **Negative line amounts are allowed** and treated as credits.
+7. **`line_numbers` is included per manifest** for the downstream matching engine's traceability,
+   even though the brief's output only shows the rolled-up figures.
+
+## Time spent
+
+~2 hours, AI-assisted (Claude Code), inside the 2–3 hour box. Roughly: 20 min grilling the spec and
+recording the domain model / ADR, 70 min TDD on the service and value objects, 30 min edge cases and
+this README.
+
+## What I'd do next with more time
+
+- **Persist the config properly.** Wrap vendor config behind a `VendorConfig` source (model / repo)
+  with Laravel validation rules and a `Money` cast, instead of validating a raw array inside the
+  service.
+- **Add invariant / property-based tests.** e.g. "sum of `manifest_total` always equals
+  `invoice_total`" and fuzz rounding across random amounts and percents to harden the money path.
+- **Swap `Money` internals for `brick/money`** (behind the same interface) the moment multi-currency,
+  allocation, or formatting requirements appear — the value object already isolates that choice.
