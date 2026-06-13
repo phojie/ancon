@@ -27,7 +27,15 @@ final readonly class Money implements \Stringable
      */
     public static function of(string|int|float $value): self
     {
-        return new self(self::round(new Number(self::toNumericString($value))));
+        $normalized = self::toNumericString($value);
+
+        try {
+            $amount = new Number($normalized);
+        } catch (\ValueError $valueError) {
+            throw new InvalidArgumentException(sprintf('Money expects a decimal value, got "%s".', $normalized), $valueError->getCode(), previous: $valueError);
+        }
+
+        return new self(self::round($amount));
     }
 
     public static function zero(): self

@@ -71,8 +71,9 @@ final class FeeCalculatorService
         $lineNumbers = [];
 
         foreach ($manifestLines as $index => $line) {
-            if (! array_key_exists('amount', $line)) {
-                throw new InvalidArgumentException(sprintf('Invoice line %s on manifest %s is missing an amount.', $index, $manifestNumber));
+            if (! isset($line['amount'])) {
+                $reference = $line['line_number'] ?? $index;
+                throw new InvalidArgumentException(sprintf('Invoice line %s on manifest %s is missing an amount.', $reference, $manifestNumber));
             }
 
             $baseTotal = $baseTotal->plus(Money::of($line['amount']));
