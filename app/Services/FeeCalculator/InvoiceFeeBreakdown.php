@@ -16,11 +16,12 @@ final readonly class InvoiceFeeBreakdown
      */
     public function __construct(
         public array $manifests,
+        public Money $invoiceFee,
         public Money $invoiceTotal,
     ) {}
 
     /**
-     * @return array{manifests: list<array<string, mixed>>, invoice_total: string}
+     * @return array{manifests: list<array<string, mixed>>, invoice_fee: string, invoice_total: string}
      */
     public function toArray(): array
     {
@@ -29,6 +30,7 @@ final readonly class InvoiceFeeBreakdown
                 static fn (ManifestFeeBreakdown $manifest): array => $manifest->toArray(),
                 $this->manifests,
             ),
+            'invoice_fee' => (string) $this->invoiceFee,
             'invoice_total' => (string) $this->invoiceTotal,
         ];
     }

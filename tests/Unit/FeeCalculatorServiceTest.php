@@ -54,6 +54,112 @@ test('calculates the worked example with exact per-manifest figures', function (
     expect((string) $result->invoiceTotal)->toBe('1445.72');
 });
 
+test('allocates the invoice flat fee across manifests after the surcharge', function () {
+    $lines = [
+        ['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 100.00],
+        ['line_number' => 2, 'manifest_number' => 'M2', 'amount' => 100.00],
+        ['line_number' => 3, 'manifest_number' => 'M3', 'amount' => 100.00],
+    ];
+    $config = [
+        'manifest_fee' => 0,
+        'surcharge_percent' => 10,
+        'surcharge_applies_to' => 'base_plus_manifest_fee',
+        'flat_fee' => 40.00,
+    ];
+
+    $result = (new FeeCalculatorService)->calculate($lines, $config);
+
+    // Surcharge stays 10% of the 100.00 subtotal -> the allocated share is NOT surcharged.
+    expect((string) $result->manifests[0]->surcharge)->toBe('10.00');
+
+    // 40.00 / 3 -> the first-seen manifest carries the leftover cent.
+    expect((string) $result->manifests[0]->allocatedShare)->toBe('13.34');
+    expect((string) $result->manifests[1]->allocatedShare)->toBe('13.33');
+    expect((string) $result->manifests[2]->allocatedShare)->toBe('13.33');
+
+    // manifest_total = subtotal + surcharge + allocated_share.
+    expect((string) $result->manifests[0]->manifestTotal)->toBe('123.34');
+    expect((string) $result->manifests[1]->manifestTotal)->toBe('123.33');
+    expect((string) $result->manifests[2]->manifestTotal)->toBe('123.33');
+
+    // The invoice grew by exactly the 40.00 flat fee (330.00 -> 370.00) and exposes it once.
+    expect((string) $result->invoiceTotal)->toBe('370.00');
+    expect((string) $result->invoiceFee)->toBe('40.00');
+});
+
+test('charges no flat fee when the invoice has no manifests', function () {
+    // Nothing to allocate across zero manifests, so the flat fee is simply not charged.
+    $result = (new FeeCalculatorService)->calculate(
+        [],
+        ['manifest_fee' => 25.00, 'surcharge_percent' => 8.7, 'surcharge_applies_to' => 'base_plus_manifest_fee', 'flat_fee' => 40.00],
+    );
+
+    expect($result->manifests)->toBe([]);
+    expect((string) $result->invoiceFee)->toBe('0.00');
+    expect((string) $result->invoiceTotal)->toBe('0.00');
+});
+
+test('gives a single manifest the whole flat fee', function () {
+    $result = (new FeeCalculatorService)->calculate(
+        [['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 100.00]],
+        ['manifest_fee' => 0, 'surcharge_percent' => 0, 'surcharge_applies_to' => 'base_plus_manifest_fee', 'flat_fee' => 40.00],
+    );
+
+    expect((string) $result->manifests[0]->allocatedShare)->toBe('40.00');
+    expect((string) $result->manifests[0]->manifestTotal)->toBe('140.00');
+    expect((string) $result->invoiceFee)->toBe('40.00');
+});
+
+test('omitting flat_fee leaves an allocated share of zero', function () {
+    $result = (new FeeCalculatorService)->calculate(
+        [['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 100.00]],
+        ['manifest_fee' => 0, 'surcharge_percent' => 0, 'surcharge_applies_to' => 'base_plus_manifest_fee'],
+    );
+
+    expect((string) $result->manifests[0]->allocatedShare)->toBe('0.00');
+    expect((string) $result->invoiceFee)->toBe('0.00');
+});
+
+test('a credit manifest still carries its equal flat-fee share', function () {
+    // M2 is a pure credit; equal allocation is blind to amount, so it still bears its share.
+    $result = (new FeeCalculatorService)->calculate(
+        [
+            ['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 100.00],
+            ['line_number' => 2, 'manifest_number' => 'M2', 'amount' => -100.00],
+            ['line_number' => 3, 'manifest_number' => 'M3', 'amount' => 50.00],
+        ],
+        ['manifest_fee' => 0, 'surcharge_percent' => 0, 'surcharge_applies_to' => 'base_plus_manifest_fee', 'flat_fee' => 40.00],
+    );
+
+    expect(array_map(fn ($m): string => (string) $m->allocatedShare, $result->manifests))
+        ->toBe(['13.34', '13.33', '13.33']);
+    // M2: base -100.00 + share 13.33 = -86.67.
+    expect((string) $result->manifests[1]->manifestTotal)->toBe('-86.67');
+    expect((string) $result->invoiceFee)->toBe('40.00');
+});
+
+test('allocated shares always reconcile to the invoice fee for an awkward split', function () {
+    // 100.00 across 7 manifests never divides cleanly; the shares must still sum to exactly 100.00.
+    $lines = [];
+    for ($i = 1; $i <= 7; $i++) {
+        $lines[] = ['line_number' => $i, 'manifest_number' => "M{$i}", 'amount' => 10.00];
+    }
+
+    $result = (new FeeCalculatorService)->calculate(
+        $lines,
+        ['manifest_fee' => 0, 'surcharge_percent' => 0, 'surcharge_applies_to' => 'base_plus_manifest_fee', 'flat_fee' => 100.00],
+    );
+
+    $sumOfShares = array_reduce(
+        $result->manifests,
+        fn (Money $carry, ManifestFeeBreakdown $manifest): Money => $carry->plus($manifest->allocatedShare),
+        Money::zero(),
+    );
+
+    expect((string) $sumOfShares)->toBe('100.00');
+    expect((string) $result->invoiceFee)->toBe('100.00');
+});
+
 test('rounds the surcharge half-up at the cent boundary', function () {
     // subtotal 100.00 * 8.755% = 8.755 -> half-up -> 8.76
     $result = (new FeeCalculatorService)->calculate(
@@ -143,8 +249,10 @@ test('serializes to a stable array contract for the matching engine', function (
             'manifest_fee' => '25.00',
             'subtotal' => '125.00',
             'surcharge' => '12.50',
+            'allocated_share' => '0.00',
             'manifest_total' => '137.50',
         ]],
+        'invoice_fee' => '0.00',
         'invoice_total' => '137.50',
     ]);
 });
@@ -202,5 +310,15 @@ test('fails loud on invalid input', function (array $lines, array $config, strin
         [['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 10.00]],
         ['manifest_fee' => 25.00, 'surcharge_percent' => '1e3', 'surcharge_applies_to' => 'base_plus_manifest_fee'],
         'Money expects a decimal value',
+    ],
+    'non-numeric flat_fee' => [
+        [['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 10.00]],
+        ['manifest_fee' => 25.00, 'surcharge_percent' => 8.7, 'surcharge_applies_to' => 'base_plus_manifest_fee', 'flat_fee' => 'free'],
+        'Vendor config "flat_fee" must be numeric.',
+    ],
+    'negative flat_fee' => [
+        [['line_number' => 1, 'manifest_number' => 'M1', 'amount' => 10.00]],
+        ['manifest_fee' => 25.00, 'surcharge_percent' => 8.7, 'surcharge_applies_to' => 'base_plus_manifest_fee', 'flat_fee' => -40.00],
+        'Vendor config "flat_fee" must not be negative.',
     ],
 ]);

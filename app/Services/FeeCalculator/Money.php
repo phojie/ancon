@@ -57,6 +57,37 @@ final readonly class Money implements \Stringable
         return new self(self::round($raw));
     }
 
+    /**
+     * Split this value into $count shares that sum back to it *exactly*.
+     *
+     * Equal split; any leftover cent is handed to the earliest shares (largest-remainder with a
+     * first-seen tiebreak), so `40.00` over 3 is `13.34, 13.33, 13.33`. A count below 1 yields no
+     * shares. Requires a non-negative value (a negative would drop the leftover cent); fee inputs
+     * are gated by {@see VendorFeeConfig}. See ADR 0002.
+     *
+     * @return list<self>
+     */
+    public function allocate(int $count): array
+    {
+        if ($count < 1) {
+            return [];
+        }
+
+        // Every Money is pre-rounded to SCALE=2, so ×100 is always integral — the cast is exact.
+        $totalCents = (int) (string) $this->amount->mul('100');
+        $baseCents = intdiv($totalCents, $count);
+        $leftoverCents = $totalCents - ($baseCents * $count);
+
+        $shares = [];
+
+        for ($index = 0; $index < $count; $index++) {
+            $shareCents = $baseCents + ($index < $leftoverCents ? 1 : 0);
+            $shares[] = new self(self::round(self::toNumber((string) $shareCents)->div('100', self::SCALE)));
+        }
+
+        return $shares;
+    }
+
     public function __toString(): string
     {
         return (string) $this->amount;

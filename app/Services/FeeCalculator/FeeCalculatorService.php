@@ -11,36 +11,48 @@ use InvalidArgumentException;
  * vendor-specific fees.
  *
  * For each unique manifest on the invoice:
- *   1. base_total     = sum of all line amounts for that manifest
- *   2. subtotal       = base_total + manifest_fee   (one fee per unique manifest)
- *   3. surcharge      = surcharge_basis * surcharge_percent
- *   4. manifest_total = subtotal + surcharge
+ *   1. base_total      = sum of all line amounts for that manifest
+ *   2. subtotal        = base_total + manifest_fee   (one fee per unique manifest)
+ *   3. surcharge       = surcharge_basis * surcharge_percent
+ *   4. allocated_share = this manifest's slice of the invoice-level flat fee (see ADR 0002)
+ *   5. manifest_total  = subtotal + surcharge + allocated_share
  *
- * All money math is exact (see {@see Money} and ADR 0001). The result is a structured,
+ * The flat fee is charged once per invoice, then allocated across the manifests so the slices sum
+ * back to it exactly — so the per-manifest figures can only be finished once every manifest is
+ * known. All money math is exact (see {@see Money} and ADRs 0001/0002). The result is a structured,
  * serializable contract for the downstream matching engine.
  */
 final class FeeCalculatorService
 {
     /**
      * @param  iterable<array{line_number?: int|string, manifest_number: string, description?: string, amount: int|float|string}>  $lines
-     * @param  array{manifest_fee?: mixed, surcharge_percent?: mixed, surcharge_applies_to?: mixed}  $vendorConfig
+     * @param  array{manifest_fee?: mixed, surcharge_percent?: mixed, surcharge_applies_to?: mixed, flat_fee?: mixed}  $vendorConfig
      */
     public function calculate(iterable $lines, array $vendorConfig): InvoiceFeeBreakdown
     {
         $config = VendorFeeConfig::fromArray($vendorConfig);
 
+        $manifestGroups = $this->groupByManifest($lines);
+        $allocatedShares = $config->flatFee->allocate(count($manifestGroups));
+
         $manifests = [];
         $invoiceTotal = Money::zero();
+        $invoiceFee = Money::zero();
+        $position = 0;
 
-        foreach ($this->groupByManifest($lines) as $manifestNumber => $manifestLines) {
+        foreach ($manifestGroups as $manifestNumber => $manifestLines) {
+            $allocatedShare = $allocatedShares[$position];
+
             // PHP coerces integer-like array keys to int, so cast back to the canonical string.
-            $breakdown = $this->calculateManifest((string) $manifestNumber, $manifestLines, $config);
+            $breakdown = $this->calculateManifest((string) $manifestNumber, $manifestLines, $config, $allocatedShare);
 
             $manifests[] = $breakdown;
             $invoiceTotal = $invoiceTotal->plus($breakdown->manifestTotal);
+            $invoiceFee = $invoiceFee->plus($allocatedShare);
+            $position++;
         }
 
-        return new InvoiceFeeBreakdown($manifests, $invoiceTotal);
+        return new InvoiceFeeBreakdown($manifests, $invoiceFee, $invoiceTotal);
     }
 
     /**
@@ -65,7 +77,7 @@ final class FeeCalculatorService
     /**
      * @param  list<array<string, mixed>>  $manifestLines
      */
-    private function calculateManifest(string $manifestNumber, array $manifestLines, VendorFeeConfig $config): ManifestFeeBreakdown
+    private function calculateManifest(string $manifestNumber, array $manifestLines, VendorFeeConfig $config, Money $allocatedShare): ManifestFeeBreakdown
     {
         $baseTotal = Money::zero();
         $lineNumbers = [];
@@ -87,7 +99,8 @@ final class FeeCalculatorService
         $surcharge = $config->surchargeBasis
             ->appliesTo($baseTotal, $subtotal)
             ->percentage($config->surchargePercent);
-        $manifestTotal = $subtotal->plus($surcharge);
+        // The allocated share is a pass-through: added after the surcharge, never surcharged (ADR 0002).
+        $manifestTotal = $subtotal->plus($surcharge)->plus($allocatedShare);
 
         return new ManifestFeeBreakdown(
             manifestNumber: $manifestNumber,
@@ -96,6 +109,7 @@ final class FeeCalculatorService
             manifestFee: $config->manifestFee,
             subtotal: $subtotal,
             surcharge: $surcharge,
+            allocatedShare: $allocatedShare,
             manifestTotal: $manifestTotal,
         );
     }

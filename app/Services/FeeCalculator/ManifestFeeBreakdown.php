@@ -22,6 +22,7 @@ final readonly class ManifestFeeBreakdown
         public Money $manifestFee,
         public Money $subtotal,
         public Money $surcharge,
+        public Money $allocatedShare,
         public Money $manifestTotal,
     ) {}
 
@@ -33,6 +34,7 @@ final readonly class ManifestFeeBreakdown
      *     manifest_fee: string,
      *     subtotal: string,
      *     surcharge: string,
+     *     allocated_share: string,
      *     manifest_total: string
      * }
      */
@@ -45,6 +47,7 @@ final readonly class ManifestFeeBreakdown
             'manifest_fee' => (string) $this->manifestFee,
             'subtotal' => (string) $this->subtotal,
             'surcharge' => (string) $this->surcharge,
+            'allocated_share' => (string) $this->allocatedShare,
             'manifest_total' => (string) $this->manifestTotal,
         ];
     }
